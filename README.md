@@ -18,3 +18,5 @@ optional arguments:
   -o OLD, --old OLD  Old DB dsn
   -n NEW, --new NEW  New DB dsn
 ```
+
+OR via docker: `docker run --rm -it sdrobov/dbcc`
