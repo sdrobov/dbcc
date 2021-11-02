@@ -4,68 +4,11 @@ from argparse import ArgumentParser, Namespace
 from sqlalchemy import MetaData, create_engine, Table, Column
 from sqlalchemy.engine import Engine
 
-ERRORS: list[str] = []
-WARNINGS: list[str] = []
-
-
-def check_tables(old_meta: MetaData, new_meta: MetaData) -> None:
-    old_table: Table
-    for old_table in old_meta.sorted_tables:
-        found = False
-        old_table_schema = f'{old_table.schema}.' if old_table.schema else ''
-        old_table_name = old_table_schema + old_table.name
-
-        new_table: Table
-        for new_table in new_meta.sorted_tables:
-            new_table_schema = f'{new_table.schema}.' if new_table.schema else ''
-            new_table_name = new_table_schema + new_table.name
-            if old_table_name == new_table_name:
-                found = True
-                break
-
-        if not found:
-            ERRORS.append(f'table {old_table_name} not found in new DB')
-
-
-def check_fields(old_meta: MetaData, new_meta: MetaData) -> None:
-    old_table: Table
-    for old_table in old_meta.sorted_tables:
-        old_table_schema = f'{old_table.schema}.' if old_table.schema else ''
-        old_table_name = old_table_schema + old_table.name
-
-        new_table: Table
-        for new_table in new_meta.sorted_tables:
-            new_table_schema = f'{new_table.schema}.' if new_table.schema else ''
-            new_table_name = new_table_schema + new_table.name
-
-            if old_table_name != new_table_name:
-                continue
-
-            old_column: Column
-            for old_column in old_table.columns:
-                found = False
-
-                new_column: Column
-                for new_column in new_table.columns:
-                    if old_column.name == new_column.name:
-                        found = True
-
-                        if str(old_column.type) != str(new_column.type):
-                            WARNINGS.append(
-                                f'column {old_table_name}.{old_column.name} '
-                                f'has type {old_column.type}, while column '
-                                f'{new_table_name}.{new_column.name} '
-                                f'has type {new_column.type}')
-
-                        break
-
-                if not found:
-                    ERRORS.append(
-                        f'column {old_table_name}.{old_column.name} '
-                        'not found in new DB')
-
 
 def main() -> None:
+    errors: list[str] = []
+    warnings: list[str] = []
+
     parser: ArgumentParser = ArgumentParser(
         description='Checks for breaking changes between DB versions')
     parser.add_argument('-o', '--old', type=str,
@@ -85,15 +28,52 @@ def main() -> None:
     new_meta: MetaData = MetaData()
     new_meta.reflect(bind=new_engine)
 
-    check_tables(old_meta, new_meta)
-    check_fields(old_meta, new_meta)
+    old_table: Table
+    for old_table in old_meta.sorted_tables:
+        table_found = False
+        old_table_schema = f'{old_table.schema}.' if old_table.schema else ''
+        old_table_name = old_table_schema + old_table.name
 
-    if len(WARNINGS) > 0:
-        for warning in WARNINGS:
+        new_table: Table
+        for new_table in new_meta.sorted_tables:
+            new_table_schema = f'{new_table.schema}.' if new_table.schema else ''
+            new_table_name = new_table_schema + new_table.name
+            if old_table_name == new_table_name:
+                table_found = True
+
+                old_column: Column
+                for old_column in old_table.columns:
+                    column_found = False
+
+                    new_column: Column
+                    for new_column in new_table.columns:
+                        if old_column.name == new_column.name:
+                            column_found = True
+
+                            if str(old_column.type) != str(new_column.type):
+                                warnings.append(
+                                    f'in old DB column {old_table_name}.{old_column.name} '
+                                    f'has type {old_column.type}, while in new DB '
+                                    f'type changed to {new_column.type}')
+
+                            break
+
+                    if not column_found:
+                        errors.append(
+                            f'column {old_table_name}.{old_column.name} '
+                            'not found in new DB')
+
+                break
+
+        if not table_found:
+            errors.append(f'table {old_table_name} not found in new DB')
+
+    if len(warnings) > 0:
+        for warning in warnings:
             print('WARNING: ' + warning)
 
-    if len(ERRORS) > 0:
-        for error in ERRORS:
+    if len(errors) > 0:
+        for error in errors:
             print('ERROR: ' + error)
 
         exit(1)
