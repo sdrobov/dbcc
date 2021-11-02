@@ -57,6 +57,8 @@ def check_fields(old_meta: MetaData, new_meta: MetaData) -> None:
                                 f'{new_table_name}.{new_column.name} '
                                 f'has type {new_column.type}')
 
+                        break
+
                 if not found:
                     ERRORS.append(
                         f'column {old_table_name}.{old_column.name} '
